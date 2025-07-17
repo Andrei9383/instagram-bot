@@ -1,86 +1,125 @@
+#!/usr/bin/env node
+/**
+ * Simplified setup wizard for Instagram Bot
+ */
+
 const fs = require('fs');
 const readline = require('readline');
 const path = require('path');
+const chalk = require('chalk');
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 });
 
-// Check if .env file exists
-const envPath = path.join(__dirname, '.env');
-const envExamplePath = path.join(__dirname, 'env.example');
+// Environment variables configuration
+const envConfig = [
+  {
+    key: 'NOTION_API_KEY',
+    description: 'Your Notion API key',
+    help: 'Get it from: https://www.notion.so/my-integrations'
+  },
+  {
+    key: 'NOTION_DATABASE_ID', 
+    description: 'Your Notion database ID',
+    help: 'The ID from your Notion database URL (after workspace name, before ?)'
+  },
+  {
+    key: 'DEEPSEEK_API_KEY',
+    description: 'Your DeepSeek AI API key',
+    help: 'Get it from: https://platform.deepseek.com/account/api-keys'
+  },
+  {
+    key: 'IG_BOT_USERNAME',
+    description: 'Instagram username for the bot account',
+    help: 'Create a dedicated Instagram account for automation'
+  },
+  {
+    key: 'IG_BOT_PASSWORD',
+    description: 'Instagram password for the bot account',
+    help: 'Use a strong, unique password'
+  }
+];
 
-console.log('🔧 Instagram Bot Setup Wizard 🔧');
-console.log('================================');
-console.log('This script will help you configure your environment variables.\n');
+console.log(chalk.cyan('🔧 Instagram Bot Setup Wizard'));
+console.log(chalk.cyan('================================\n'));
 
-// Read the example env file
-const envExample = fs.readFileSync(envExamplePath, 'utf8');
-const envLines = envExample.split('\n').filter(line => line.trim() && !line.startsWith('#'));
+console.log(chalk.yellow('This wizard will help you configure your environment variables.\n'));
 
-const envConfig = {};
-
-// Function to prompt for each environment variable
-const promptForEnvVar = (index) => {
-  if (index >= envLines.length) {
-    // All variables collected, write to .env file
-    const envContent = Object.entries(envConfig)
-      .map(([key, value]) => `${key}=${value}`)
-      .join('\n');
-    
-    fs.writeFileSync(envPath, envContent);
-    console.log('\n✅ Environment variables saved to .env file!');
-    console.log('\n📋 Next steps:');
-    console.log('1. Run `npm install` to install dependencies');
-    console.log('2. Run one of the following commands to start the application:');
-    console.log('   - `npm start` - Run the CLI tool');
-    console.log('   - `npm run start:web` - Start the web UI');
-    console.log('   - `npm run start:n8n` - Start the n8n workflow');
-    console.log('   - `npm run start:serverless` - Run the serverless version');
-    console.log('\n🔗 Remember to set up your Notion integration and database as described in the README.md');
-    
-    rl.close();
+/**
+ * Prompt for environment variable input
+ */
+function promptForVariable(index, values = {}) {
+  if (index >= envConfig.length) {
+    // All variables collected, save to .env file
+    saveEnvironmentFile(values);
     return;
   }
   
-  const line = envLines[index];
-  const [key, defaultValue] = line.split('=');
+  const config = envConfig[index];
   
-  const description = getVarDescription(key);
+  console.log(chalk.blue(`\n${config.description}`));
+  console.log(chalk.gray(`💡 ${config.help}`));
   
-  console.log(`\n${description}`);
-  rl.question(`${key} (${defaultValue || 'no default'}): `, (answer) => {
-    envConfig[key] = answer || defaultValue;
-    promptForEnvVar(index + 1);
+  rl.question(chalk.white(`${config.key}: `), (answer) => {
+    if (answer.trim()) {
+      values[config.key] = answer.trim();
+    } else {
+      console.log(chalk.red('❌ This field is required. Please try again.'));
+      return promptForVariable(index, values);
+    }
+    
+    promptForVariable(index + 1, values);
   });
-};
-
-// Function to get description for each environment variable
-function getVarDescription(key) {
-  const descriptions = {
-    'NOTION_API_KEY': 'Your Notion API key (from https://www.notion.so/my-integrations)',
-    'NOTION_DATABASE_ID': 'Your Notion database ID (the part of the URL after the workspace name and before the question mark)',
-    'DEEPSEEK_API_KEY': 'Your DeepSeek AI API key (from https://platform.deepseek.com/account/api-keys)',
-    'INSTAGRAM_USERNAME': 'Your Instagram username',
-    'INSTAGRAM_PASSWORD': 'Your Instagram password',
-    'N8N_WEBHOOK_URL': 'The webhook URL for n8n (will be generated when you start n8n)',
-    'RAPID_API_KEY': 'Your RapidAPI key (optional, for serverless implementation)'
-  };
-  
-  return descriptions[key] || `Enter value for ${key}`;
 }
 
-// Check if .env already exists
-if (fs.existsSync(envPath)) {
-  rl.question('An .env file already exists. Do you want to overwrite it? (y/n): ', (answer) => {
-    if (answer.toLowerCase() === 'y') {
-      promptForEnvVar(0);
-    } else {
-      console.log('Setup cancelled. Your existing .env file was not modified.');
-      rl.close();
-    }
-  });
-} else {
-  promptForEnvVar(0);
-} 
+/**
+ * Save environment variables to .env file
+ */
+function saveEnvironmentFile(values) {
+  const envPath = path.join(__dirname, '.env');
+  const envContent = Object.entries(values)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+  
+  fs.writeFileSync(envPath, envContent);
+  
+  console.log(chalk.green('\n✅ Environment variables saved to .env file!'));
+  
+  console.log(chalk.cyan('\n📋 Next steps:'));
+  console.log(chalk.gray('1. Install Python dependencies: pip3 install instagrapi'));
+  console.log(chalk.gray('2. Test your setup: npm test'));
+  console.log(chalk.gray('3. Process a single URL: npm start -- "https://www.instagram.com/p/XXXX/"'));
+  console.log(chalk.gray('4. Start DM monitoring: npm run monitor'));
+  
+  console.log(chalk.yellow('\n⚠️  Important: Keep your .env file secure and never commit it to version control!'));
+  
+  rl.close();
+}
+
+/**
+ * Check if .env file already exists
+ */
+function checkExistingEnv() {
+  const envPath = path.join(__dirname, '.env');
+  
+  if (fs.existsSync(envPath)) {
+    console.log(chalk.yellow('⚠️  An .env file already exists.'));
+    rl.question(chalk.white('Do you want to overwrite it? (y/n): '), (answer) => {
+      if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
+        console.log(chalk.blue('\nLet\'s configure your environment variables:\n'));
+        promptForVariable(0);
+      } else {
+        console.log(chalk.gray('Setup cancelled. Your existing .env file was not modified.'));
+        rl.close();
+      }
+    });
+  } else {
+    console.log(chalk.blue('Let\'s configure your environment variables:\n'));
+    promptForVariable(0);
+  }
+}
+
+// Start setup
+checkExistingEnv();

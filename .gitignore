@@ -52,3 +52,5 @@ jspm_packages/
 
 # Puppeteer user data
 .user-data-dir/ 
+processed.json 
+*_session.json
