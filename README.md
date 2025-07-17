@@ -1,4 +1,4 @@
-# Instagram Bot - Simplified with instagrapi
+# Instagram AI Summarizer Bot
 
 A streamlined Instagram bot that automatically processes shared posts/reels, generates AI summaries, and saves them to Notion using the reliable `instagrapi` framework.
 
