@@ -1,0 +1,326 @@
+{
+  "name": "Instagram Post/Reel Summarizer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-summarizer",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the URL from the incoming webhook\nconst url = $input.body.url;\n\nif (!url || typeof url !== 'string') {\n  return {\n    error: 'Please provide a valid Instagram URL in the request body',\n    success: false\n  };\n}\n\n// Validate that it's an Instagram URL\nif (!url.includes('instagram.com/')) {\n  return {\n    error: 'URL must be from instagram.com',\n    success: false\n  };\n}\n\nreturn {\n  url,\n  success: true\n};"
+      },
+      "name": "Validate URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Valid URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "=https://api.deepseek.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=$env.DEEPSEEK_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\":\"system\",\"content\":\"You are a helpful assistant that summarizes Instagram posts and reels. Extract key points, topics, and themes.\"},{\"role\":\"user\",\"content\":\"Please summarize this Instagram post content:\\n\\nUsername: Unknown\\n\\nCaption: This is a post about \" + $input.url + \"\\n\\nURL: \" + $input.url + \"\\n\\nProvide a concise summary and identify 3-5 key tags/topics.\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": 500
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Summarize with DeepSeek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "DeepSeek API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process the DeepSeek API response\nconst data = $input.body;\nconst url = $input.url;\n\nif (!data || !data.choices || !data.choices[0]) {\n  return {\n    success: false,\n    error: 'Invalid response from DeepSeek API'\n  };\n}\n\nconst summary = data.choices[0].message.content;\n\n// Extract tags from summary\nconst summaryParts = summary.split(/Tags:|Topics:|Keywords:/i);\nconst mainSummary = summaryParts[0].trim();\n\n// Extract tags if they exist\nlet tags = [];\nif (summaryParts.length > 1) {\n  tags = summaryParts[1]\n    .split(/,|\\n/)\n    .map(tag => tag.trim())\n    .filter(Boolean);\n}\n\nreturn {\n  success: true,\n  summary,\n  mainSummary,\n  tags,\n  url\n};"
+      },
+      "name": "Process Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "=https://api.notion.com/v1/pages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "parent",
+              "value": "={\"database_id\": \"$env.NOTION_DATABASE_ID\"}"
+            },
+            {
+              "name": "properties",
+              "value": "={\n  \"Title\": {\n    \"title\": [\n      {\n        \"text\": {\n          \"content\": \"Instagram Post - \" + $now.toLocaleDateString()\n        }\n      }\n    ]\n  },\n  \"URL\": {\n    \"url\": $input.url\n  },\n  \"Summary\": {\n    \"rich_text\": [\n      {\n        \"text\": {\n          \"content\": $input.mainSummary.substring(0, 2000)\n        }\n      }\n    ]\n  },\n  \"Tags\": {\n    \"multi_select\": $input.tags.slice(0, 10).map(tag => ({ \"name\": tag }))\n  },\n  \"Date\": {\n    \"date\": {\n      \"start\": $now.toISOString()\n    }\n  }\n}"
+            },
+            {
+              "name": "children",
+              "value": "=[\n  {\n    \"object\": \"block\",\n    \"type\": \"paragraph\",\n    \"paragraph\": {\n      \"rich_text\": [\n        {\n          \"type\": \"text\",\n          \"text\": {\n            \"content\": \"Original URL:\",\n            \"link\": null\n          },\n          \"annotations\": {\n            \"bold\": true,\n            \"italic\": false,\n            \"strikethrough\": false,\n            \"underline\": false,\n            \"code\": false,\n            \"color\": \"default\"\n          }\n        }\n      ]\n    }\n  },\n  {\n    \"object\": \"block\",\n    \"type\": \"paragraph\",\n    \"paragraph\": {\n      \"rich_text\": [\n        {\n          \"type\": \"text\",\n          \"text\": {\n            \"content\": $input.url,\n            \"link\": {\n              \"url\": $input.url\n            }\n          }\n        }\n      ]\n    }\n  },\n  {\n    \"object\": \"block\",\n    \"type\": \"paragraph\",\n    \"paragraph\": {\n      \"rich_text\": [\n        {\n          \"type\": \"text\",\n          \"text\": {\n            \"content\": \"Summary:\",\n            \"link\": null\n          },\n          \"annotations\": {\n            \"bold\": true,\n            \"italic\": false,\n            \"strikethrough\": false,\n            \"underline\": false,\n            \"code\": false,\n            \"color\": \"default\"\n          }\n        }\n      ]\n    }\n  },\n  {\n    \"object\": \"block\",\n    \"type\": \"paragraph\",\n    \"paragraph\": {\n      \"rich_text\": [\n        {\n          \"type\": \"text\",\n          \"text\": {\n            \"content\": $input.summary,\n            \"link\": null\n          }\n        }\n      ]\n    }\n  }\n]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Save to Notion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1150,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Notion API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: $json.error} }}",
+        "options": {}
+      },
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Process Successful?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: true, notionPageUrl: $json.notionPageUrl} }}",
+        "options": {}
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: $json.error} }}",
+        "options": {}
+      },
+      "name": "Process Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate URL": {
+      "main": [
+        [
+          {
+            "node": "Is Valid URL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid URL?": {
+      "main": [
+        [
+          {
+            "node": "Summarize with DeepSeek",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize with DeepSeek": {
+      "main": [
+        [
+          {
+            "node": "Process Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Summary": {
+      "main": [
+        [
+          {
+            "node": "Save to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Notion": {
+      "main": [
+        [
+          {
+            "node": "Process Successful?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Successful?": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "version": 1,
+  "meta": {
+    "instanceId": "instagram-summarizer"
+  },
+  "tags": []
+} 

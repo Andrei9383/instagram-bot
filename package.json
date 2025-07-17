@@ -1,0 +1,32 @@
+{
+  "name": "instagram-bot",
+  "version": "1.0.0",
+  "description": "Extract content from Instagram posts/reels, summarize with DeepSeek AI, and save to Notion",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "serverless": "node serverless.js",
+    "downloader": "node instagram-downloader.js",
+    "archive": "node archive-post-processor.js",
+    "test": "node test.js",
+    "demo": "node demo.js",
+    "test:api": "node test-integration.js",
+    "extract": "node extract-only.js"
+  },
+  "keywords": [
+    "instagram",
+    "notion",
+    "ai",
+    "summarization",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@notionhq/client": "^2.2.14",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^2.7.0",
+    "puppeteer": "^19.11.1"
+  }
+}
